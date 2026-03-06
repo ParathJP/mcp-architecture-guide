@@ -11,8 +11,8 @@ through the Model Context Protocol (MCP).
 - Interview-ready Q&As with polished answers
 
 ## How to View
-Visit the live site: https://yourusername.github.io/mcp-architecture-guide/
+Visit the live site: https://parathjp.github.io/mcp-architecture-guide/
 
-Or download index.html and open it in any browser.
+Or download mcp-architecture.html and open it in any browser.
 
 Built for IT professionals looking to understand MCP without drowning in docs.
