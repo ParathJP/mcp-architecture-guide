@@ -1,2 +1,18 @@
-# mcp-architecture-guide
-Ever wondered how Claude or ChatGPT actually connects to Brave Search or Gmail behind the scenes? This interactive guide breaks it down visually from the full request flow to ITSM analogies to interview-ready answers. Built for IT folks who want to understand MCP without drowning in docs.
+# MCP Architecture Guide
+
+An interactive visual guide explaining how AI tools access external services
+through the Model Context Protocol (MCP).
+
+## What's Inside
+- Step-by-step flow from user question to search results and back
+- 5-layer architecture diagram with key concepts
+- Hotel Concierge & ITSM analogies for easy understanding
+- Annotated config file breakdown
+- Interview-ready Q&As with polished answers
+
+## How to View
+Visit the live site: https://yourusername.github.io/mcp-architecture-guide/
+
+Or download index.html and open it in any browser.
+
+Built for IT professionals looking to understand MCP without drowning in docs.
