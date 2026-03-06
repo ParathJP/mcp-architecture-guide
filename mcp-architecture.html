@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>How AI Tools Access External Services via MCP</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=DM+Sans:wght@400;500;700&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #232736;
+    --accent: #f59e0b;
+    --accent2: #3b82f6;
+    --accent3: #10b981;
+    --accent4: #ef4444;
+    --accent5: #a855f7;
+    --text: #e2e8f0;
+    --text-dim: #8892a8;
+    --border: #2d3348;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  .hero {
+    text-align: center;
+    padding: 60px 20px 40px;
+    position: relative;
+  }
+
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 50%;
+    transform: translateX(-50%);
+    width: 600px; height: 600px;
+    background: radial-gradient(circle, rgba(245,158,11,0.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .hero h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(2rem, 5vw, 3.2rem);
+    font-weight: 800;
+    background: linear-gradient(135deg, #f59e0b, #fbbf24, #f59e0b);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 12px;
+  }
+
+  .hero .subtitle {
+    color: var(--text-dim);
+    font-size: 1.05rem;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 20px;
+  }
+
+  /* Navigation Tabs */
+  .tabs {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin: 30px 0 40px;
+    flex-wrap: wrap;
+  }
+
+  .tab {
+    padding: 10px 22px;
+    border-radius: 30px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-dim);
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: all 0.3s ease;
+  }
+
+  .tab:hover { border-color: var(--accent); color: var(--text); }
+  .tab.active {
+    background: var(--accent);
+    color: #000;
+    border-color: var(--accent);
+    font-weight: 700;
+  }
+
+  /* Sections */
+  .section { display: none; animation: fadeIn 0.4s ease; }
+  .section.active { display: block; }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(15px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Big Picture Flow */
+  .flow-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    align-items: center;
+    margin: 20px 0;
+  }
+
+  .flow-node {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px 32px;
+    width: 100%;
+    max-width: 700px;
+    position: relative;
+    transition: all 0.3s ease;
+  }
+
+  .flow-node:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+  }
+
+  .flow-node .step-badge {
+    position: absolute;
+    top: -14px;
+    left: 28px;
+    padding: 4px 14px;
+    border-radius: 20px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+
+  .flow-node h3 {
+    font-size: 1.15rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .flow-node p {
+    color: var(--text-dim);
+    font-size: 0.92rem;
+    line-height: 1.7;
+  }
+
+  .flow-node .tech-tag {
+    display: inline-block;
+    background: rgba(245,158,11,0.1);
+    border: 1px solid rgba(245,158,11,0.25);
+    color: var(--accent);
+    padding: 2px 10px;
+    border-radius: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    margin: 4px 2px 0;
+  }
+
+  .flow-arrow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 6px 0;
+    color: var(--text-dim);
+    font-size: 0.8rem;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .flow-arrow svg {
+    width: 24px;
+    height: 28px;
+    stroke: var(--accent);
+    fill: none;
+    stroke-width: 2;
+  }
+
+  .flow-arrow .arrow-label {
+    background: var(--surface2);
+    padding: 3px 12px;
+    border-radius: 12px;
+    font-size: 0.72rem;
+    color: var(--accent);
+    margin-top: 2px;
+  }
+
+  /* Color coding */
+  .node-user { border-left: 4px solid var(--accent); }
+  .node-user .step-badge { background: var(--accent); color: #000; }
+
+  .node-ai { border-left: 4px solid var(--accent2); }
+  .node-ai .step-badge { background: var(--accent2); color: #fff; }
+
+  .node-mcp { border-left: 4px solid var(--accent3); }
+  .node-mcp .step-badge { background: var(--accent3); color: #000; }
+
+  .node-tool { border-left: 4px solid var(--accent5); }
+  .node-tool .step-badge { background: var(--accent5); color: #fff; }
+
+  .node-ext { border-left: 4px solid var(--accent4); }
+  .node-ext .step-badge { background: var(--accent4); color: #fff; }
+
+  /* Analogy Section */
+  .analogy-card {
+    background: linear-gradient(135deg, var(--surface), var(--surface2));
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 36px;
+    margin: 20px 0;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .analogy-card::before {
+    content: '💡';
+    font-size: 4rem;
+    position: absolute;
+    top: -10px;
+    right: 20px;
+    opacity: 0.1;
+  }
+
+  .analogy-card h3 {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.4rem;
+    color: var(--accent);
+    margin-bottom: 16px;
+  }
+
+  .analogy-grid {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 16px;
+    align-items: start;
+    margin-top: 20px;
+  }
+
+  .analogy-col h4 {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--accent);
+    margin-bottom: 12px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .analogy-col.right h4 { color: var(--accent2); }
+
+  .analogy-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 0;
+    font-size: 0.9rem;
+  }
+
+  .analogy-equals {
+    display: flex;
+    flex-direction: column;
+    gap: 36px;
+    padding-top: 36px;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9rem;
+  }
+
+  /* Interview Card */
+  .interview-section {
+    margin: 20px 0;
+  }
+
+  .interview-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px;
+    margin-bottom: 16px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+
+  .interview-card:hover {
+    border-color: var(--accent);
+    box-shadow: 0 4px 20px rgba(245,158,11,0.1);
+  }
+
+  .interview-q {
+    font-weight: 700;
+    font-size: 1.05rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .interview-q .q-badge {
+    background: var(--accent);
+    color: #000;
+    padding: 2px 10px;
+    border-radius: 10px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .interview-a {
+    display: none;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    color: var(--text-dim);
+    font-size: 0.92rem;
+    line-height: 1.8;
+  }
+
+  .interview-a.open { display: block; animation: fadeIn 0.3s ease; }
+
+  .interview-a strong { color: var(--text); }
+  .interview-a .highlight {
+    background: rgba(245,158,11,0.1);
+    border-left: 3px solid var(--accent);
+    padding: 12px 16px;
+    border-radius: 0 8px 8px 0;
+    margin: 12px 0;
+    font-style: italic;
+    color: var(--text);
+  }
+
+  /* Config Section */
+  .config-block {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+    margin: 20px 0;
+  }
+
+  .config-header {
+    background: var(--surface2);
+    padding: 14px 20px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+    color: var(--accent);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .config-body {
+    padding: 20px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.82rem;
+    line-height: 1.9;
+    overflow-x: auto;
+    white-space: pre;
+    color: var(--text-dim);
+  }
+
+  .config-body .key { color: var(--accent2); }
+  .config-body .val { color: var(--accent3); }
+  .config-body .comment { color: #555; font-style: italic; }
+
+  /* Architecture Diagram */
+  .arch-diagram {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0;
+    margin: 20px 0;
+    position: relative;
+  }
+
+  .arch-layer {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    text-align: center;
+    margin: 6px 0;
+  }
+
+  .arch-layer h4 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 10px;
+  }
+
+  .arch-layer .components {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .arch-chip {
+    padding: 8px 18px;
+    border-radius: 10px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .layer-user { border-color: var(--accent); }
+  .layer-user h4 { color: var(--accent); }
+  .layer-user .arch-chip { background: rgba(245,158,11,0.15); color: var(--accent); border: 1px solid rgba(245,158,11,0.3); }
+
+  .layer-ai { border-color: var(--accent2); }
+  .layer-ai h4 { color: var(--accent2); }
+  .layer-ai .arch-chip { background: rgba(59,130,246,0.15); color: var(--accent2); border: 1px solid rgba(59,130,246,0.3); }
+
+  .layer-mcp { border-color: var(--accent3); }
+  .layer-mcp h4 { color: var(--accent3); }
+  .layer-mcp .arch-chip { background: rgba(16,185,129,0.15); color: var(--accent3); border: 1px solid rgba(16,185,129,0.3); }
+
+  .layer-tool { border-color: var(--accent5); }
+  .layer-tool h4 { color: var(--accent5); }
+  .layer-tool .arch-chip { background: rgba(168,85,247,0.15); color: var(--accent5); border: 1px solid rgba(168,85,247,0.3); }
+
+  .layer-ext { border-color: var(--accent4); }
+  .layer-ext h4 { color: var(--accent4); }
+  .layer-ext .arch-chip { background: rgba(239,68,68,0.15); color: var(--accent4); border: 1px solid rgba(239,68,68,0.3); }
+
+  .arch-connector {
+    text-align: center;
+    padding: 4px 0;
+    color: var(--text-dim);
+    font-size: 0.75rem;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* Key Concepts */
+  .concepts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+    margin: 20px 0;
+  }
+
+  .concept-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    transition: all 0.3s ease;
+  }
+
+  .concept-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+  }
+
+  .concept-card .icon {
+    font-size: 2rem;
+    margin-bottom: 12px;
+  }
+
+  .concept-card h4 {
+    font-size: 1rem;
+    margin-bottom: 8px;
+    color: var(--text);
+  }
+
+  .concept-card p {
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+
+  .footer-note {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-dim);
+    font-size: 0.8rem;
+    border-top: 1px solid var(--border);
+    margin-top: 40px;
+  }
+
+  @media (max-width: 700px) {
+    .analogy-grid { grid-template-columns: 1fr; }
+    .analogy-equals { display: none; }
+    .flow-node { padding: 22px 18px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>How AI Tools Access External Services</h1>
+  <p class="subtitle">A complete guide to MCP architecture — from your question to Brave Search results and back, explained simply.</p>
+</div>
+
+<div class="container">
+  <div class="tabs">
+    <button class="tab active" onclick="showSection('bigpicture')">🔄 The Full Flow</button>
+    <button class="tab" onclick="showSection('architecture')">🏗️ Architecture</button>
+    <button class="tab" onclick="showSection('analogy')">💡 Simple Analogy</button>
+    <button class="tab" onclick="showSection('config')">⚙️ Under the Hood</button>
+    <button class="tab" onclick="showSection('interview')">🎤 Interview Ready</button>
+  </div>
+
+  <!-- ===== SECTION 1: BIG PICTURE ===== -->
+  <div id="bigpicture" class="section active">
+    <div class="flow-container">
+
+      <div class="flow-node node-user">
+        <span class="step-badge">STEP 1 — YOU</span>
+        <h3>👤 You Ask a Question</h3>
+        <p>You type a question into Claude Desktop, e.g., <em>"What are the latest AI trends in ITSM for 2026?"</em><br>
+        This is just a normal chat message — nothing special yet.</p>
+        <div style="margin-top:8px"><span class="tech-tag">Claude Desktop App</span></div>
+      </div>
+
+      <div class="flow-arrow">
+        <svg viewBox="0 0 24 28"><path d="M12 2 L12 22 M6 16 L12 22 L18 16"/></svg>
+        <span class="arrow-label">message sent to AI</span>
+      </div>
+
+      <div class="flow-node node-ai">
+        <span class="step-badge">STEP 2 — AI BRAIN</span>
+        <h3>🧠 Claude AI Processes Your Request</h3>
+        <p>Claude's language model reads your question and <strong>decides</strong>: "I need to search the web to give a current answer."
+        It knows it has access to tools like Brave Search because the <strong>MCP config</strong> told it so at startup.<br><br>
+        Think of this like the AI checking its toolkit and picking the right tool for the job.</p>
+        <div style="margin-top:8px"><span class="tech-tag">Claude LLM</span> <span class="tech-tag">Tool Selection</span></div>
+      </div>
+
+      <div class="flow-arrow">
+        <svg viewBox="0 0 24 28"><path d="M12 2 L12 22 M6 16 L12 22 L18 16"/></svg>
+        <span class="arrow-label">tool call via JSON-RPC</span>
+      </div>
+
+      <div class="flow-node node-mcp">
+        <span class="step-badge">STEP 3 — MCP PROTOCOL</span>
+        <h3>🔌 MCP Server Receives the Request</h3>
+        <p>The <strong>MCP (Model Context Protocol)</strong> acts as a universal translator between the AI and external tools.<br><br>
+        Claude sends a structured request: <em>"search for: AI trends ITSM 2026"</em> using a standard format called <strong>JSON-RPC</strong>.<br><br>
+        The MCP server (running locally on your machine via <code>uvx</code>) receives this and translates it into the right format for the external service.</p>
+        <div style="margin-top:8px"><span class="tech-tag">MCP Protocol</span> <span class="tech-tag">JSON-RPC</span> <span class="tech-tag">uvx / npx</span> <span class="tech-tag">localhost</span></div>
+      </div>
+
+      <div class="flow-arrow">
+        <svg viewBox="0 0 24 28"><path d="M12 2 L12 22 M6 16 L12 22 L18 16"/></svg>
+        <span class="arrow-label">API call over HTTPS</span>
+      </div>
+
+      <div class="flow-node node-tool">
+        <span class="step-badge">STEP 4 — TOOL CONNECTOR</span>
+        <h3>🔧 Tool-Specific Adapter Calls the API</h3>
+        <p>The MCP server for Brave Search knows exactly how to talk to Brave's API. It takes Claude's generic search request and converts it into Brave Search's specific API format, attaches your <strong>API key</strong> for authentication, and sends the HTTPS request to Brave's servers.</p>
+        <div style="margin-top:8px"><span class="tech-tag">brave-search MCP</span> <span class="tech-tag">API Key Auth</span> <span class="tech-tag">HTTPS</span></div>
+      </div>
+
+      <div class="flow-arrow">
+        <svg viewBox="0 0 24 28"><path d="M12 2 L12 22 M6 16 L12 22 L18 16"/></svg>
+        <span class="arrow-label">internet request →</span>
+      </div>
+
+      <div class="flow-node node-ext">
+        <span class="step-badge">STEP 5 — EXTERNAL SERVICE</span>
+        <h3>🌐 Brave Search Returns Results</h3>
+        <p>Brave Search processes the query on its servers, searches the web, and returns results as structured data (JSON) — titles, URLs, snippets.<br><br>
+        This is the same as what happens when you search on Brave's website, but done programmatically.</p>
+        <div style="margin-top:8px"><span class="tech-tag">Brave Search API</span> <span class="tech-tag">JSON Response</span></div>
+      </div>
+
+      <div class="flow-arrow">
+        <svg viewBox="0 0 24 28"><path d="M12 2 L12 22 M6 16 L12 22 L18 16"/></svg>
+        <span class="arrow-label">← results flow back through same path</span>
+      </div>
+
+      <div class="flow-node node-ai" style="border-left-color: var(--accent);">
+        <span class="step-badge" style="background: linear-gradient(135deg, var(--accent2), var(--accent));">STEP 6 — AI RESPONDS</span>
+        <h3>✨ Claude Reads Results & Answers You</h3>
+        <p>The search results travel back: <strong>Brave → MCP Server → Claude</strong>.<br><br>
+        Claude reads the raw results, <strong>synthesizes</strong> them into a clear, natural language answer, and presents it to you in the chat — with sources, summaries, and context.<br><br>
+        The entire round-trip takes just a few seconds.</p>
+        <div style="margin-top:8px"><span class="tech-tag">Response Synthesis</span> <span class="tech-tag">Natural Language</span></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ===== SECTION 2: ARCHITECTURE ===== -->
+  <div id="architecture" class="section">
+    <div class="arch-diagram">
+
+      <div class="arch-layer layer-user">
+        <h4>Layer 1 — User Interface</h4>
+        <div class="components">
+          <span class="arch-chip">💬 Claude Desktop</span>
+          <span class="arch-chip">🌐 claude.ai</span>
+          <span class="arch-chip">📱 Claude Mobile</span>
+        </div>
+      </div>
+
+      <div class="arch-connector">▼ &nbsp; User's question &nbsp; ▼</div>
+
+      <div class="arch-layer layer-ai">
+        <h4>Layer 2 — AI Model (The Brain)</h4>
+        <div class="components">
+          <span class="arch-chip">🧠 Claude LLM</span>
+          <span class="arch-chip">🎯 Tool Selection Logic</span>
+          <span class="arch-chip">📝 Response Generator</span>
+        </div>
+      </div>
+
+      <div class="arch-connector">▼ &nbsp; Structured tool call (JSON-RPC) &nbsp; ▼</div>
+
+      <div class="arch-layer layer-mcp">
+        <h4>Layer 3 — MCP Protocol (The Bridge)</h4>
+        <div class="components">
+          <span class="arch-chip">🔌 MCP Standard</span>
+          <span class="arch-chip">📡 stdio / SSE Transport</span>
+          <span class="arch-chip">🛡️ Permission Layer</span>
+        </div>
+      </div>
+
+      <div class="arch-connector">▼ &nbsp; Translated API calls &nbsp; ▼</div>
+
+      <div class="arch-layer layer-tool">
+        <h4>Layer 4 — MCP Servers (Tool Adapters)</h4>
+        <div class="components">
+          <span class="arch-chip">🔍 Brave Search</span>
+          <span class="arch-chip">🌊 Tavily</span>
+          <span class="arch-chip">📂 Filesystem</span>
+          <span class="arch-chip">🗃️ Database</span>
+          <span class="arch-chip">📧 Gmail</span>
+        </div>
+      </div>
+
+      <div class="arch-connector">▼ &nbsp; HTTPS / local access &nbsp; ▼</div>
+
+      <div class="arch-layer layer-ext">
+        <h4>Layer 5 — External Services & Data</h4>
+        <div class="components">
+          <span class="arch-chip">🌐 Web APIs</span>
+          <span class="arch-chip">💾 Local Files</span>
+          <span class="arch-chip">☁️ Cloud Services</span>
+          <span class="arch-chip">📊 Databases</span>
+        </div>
+      </div>
+
+    </div>
+
+    <h3 style="margin: 30px 0 16px; font-size: 1.1rem;">Key Concepts</h3>
+    <div class="concepts-grid">
+      <div class="concept-card">
+        <div class="icon">🔌</div>
+        <h4>MCP Protocol</h4>
+        <p>A universal standard created by Anthropic. Instead of every AI building custom integrations for every tool, MCP gives one common language that all tools can speak.</p>
+      </div>
+      <div class="concept-card">
+        <div class="icon">🏃</div>
+        <h4>uvx / npx</h4>
+        <p>Lightweight runners that download and execute MCP servers without permanent installation. <code>uvx</code> runs Python servers, <code>npx</code> runs Node.js servers.</p>
+      </div>
+      <div class="concept-card">
+        <div class="icon">📡</div>
+        <h4>JSON-RPC</h4>
+        <p>The messaging format MCP uses — a structured way to say "call this function with these parameters." It's like a standardised ticket format between systems.</p>
+      </div>
+      <div class="concept-card">
+        <div class="icon">🔑</div>
+        <h4>API Keys</h4>
+        <p>Authentication tokens stored in your config. The MCP server attaches these when calling external services — like a badge that proves you're authorised to use the service.</p>
+      </div>
+      <div class="concept-card">
+        <div class="icon">🏠</div>
+        <h4>Runs Locally</h4>
+        <p>MCP servers run on YOUR machine, not in the cloud. Your API keys and data stay local. The AI model in the cloud only sees the final results the MCP server sends back.</p>
+      </div>
+      <div class="concept-card">
+        <div class="icon">🔄</div>
+        <h4>Bidirectional</h4>
+        <p>Data flows both ways — AI sends requests out, and receives results back. Each MCP server is a two-way bridge between the AI and one specific external tool.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== SECTION 3: ANALOGY ===== -->
+  <div id="analogy" class="section">
+    <div class="analogy-card">
+      <h3>The Hotel Concierge Analogy</h3>
+      <p style="color:var(--text-dim); margin-bottom: 20px;">Imagine you're a guest at a 5-star hotel. You don't speak the local language, but the hotel has a concierge desk that handles everything for you.</p>
+
+      <div class="analogy-grid">
+        <div class="analogy-col">
+          <h4>🏨 Hotel World</h4>
+          <div class="analogy-row">👤 You (the guest)</div>
+          <div class="analogy-row">🏨 Hotel Concierge Desk</div>
+          <div class="analogy-row">📋 Standard Request Form</div>
+          <div class="analogy-row">🧑‍💼 Concierge Staff (speaks local language)</div>
+          <div class="analogy-row">🍽️ Restaurant / 🚕 Taxi / 🎭 Theatre</div>
+          <div class="analogy-row">📞 Phone Call to Restaurant</div>
+          <div class="analogy-row">✅ "Your table is booked at 8 PM"</div>
+        </div>
+
+        <div class="analogy-equals">
+          <span>=</span><span>=</span><span>=</span><span>=</span><span>=</span><span>=</span><span>=</span>
+        </div>
+
+        <div class="analogy-col right">
+          <h4 style="color:var(--accent2);">💻 MCP World</h4>
+          <div class="analogy-row">👤 You (asking Claude)</div>
+          <div class="analogy-row">🧠 Claude AI (the brain)</div>
+          <div class="analogy-row">📡 MCP Protocol (JSON-RPC)</div>
+          <div class="analogy-row">🔌 MCP Server (e.g., brave-search)</div>
+          <div class="analogy-row">🌐 Brave / Tavily / Gmail / Slack</div>
+          <div class="analogy-row">📡 HTTPS API Call</div>
+          <div class="analogy-row">✅ "Here are your search results"</div>
+        </div>
+      </div>
+
+      <div style="margin-top: 28px; padding: 16px; background: rgba(245,158,11,0.08); border-radius: 12px; border: 1px solid rgba(245,158,11,0.2);">
+        <strong style="color: var(--accent);">The Key Insight:</strong>
+        <span style="color: var(--text-dim);"> You never need to learn how to call the restaurant yourself. The concierge (MCP) handles the translation. Similarly, Claude never directly calls Brave Search — the MCP server handles all the translation and API communication.</span>
+      </div>
+    </div>
+
+    <div class="analogy-card" style="margin-top: 24px;">
+      <h3>The ITSM Analogy (For IT Interviews)</h3>
+      <p style="color:var(--text-dim); margin-bottom: 16px;">Since you work in IT service management, here's how MCP maps to ITSM concepts:</p>
+
+      <div style="display:grid; gap:12px;">
+        <div style="display:grid; grid-template-columns: 200px 1fr; gap:12px; padding:10px; background:var(--surface2); border-radius:10px;">
+          <strong style="color:var(--accent);">End User</strong>
+          <span style="color:var(--text-dim);">→ You chatting with Claude</span>
+        </div>
+        <div style="display:grid; grid-template-columns: 200px 1fr; gap:12px; padding:10px; background:var(--surface2); border-radius:10px;">
+          <strong style="color:var(--accent2);">Service Desk (L1/L2)</strong>
+          <span style="color:var(--text-dim);">→ Claude AI (receives request, triages, decides who to involve)</span>
+        </div>
+        <div style="display:grid; grid-template-columns: 200px 1fr; gap:12px; padding:10px; background:var(--surface2); border-radius:10px;">
+          <strong style="color:var(--accent3);">ITSM Platform (ServiceNow)</strong>
+          <span style="color:var(--text-dim);">→ MCP Protocol (standard process that connects everything)</span>
+        </div>
+        <div style="display:grid; grid-template-columns: 200px 1fr; gap:12px; padding:10px; background:var(--surface2); border-radius:10px;">
+          <strong style="color:var(--accent5);">Resolver Group</strong>
+          <span style="color:var(--text-dim);">→ MCP Server (specialised team that knows the specific system)</span>
+        </div>
+        <div style="display:grid; grid-template-columns: 200px 1fr; gap:12px; padding:10px; background:var(--surface2); border-radius:10px;">
+          <strong style="color:var(--accent4);">External Vendor / Tool</strong>
+          <span style="color:var(--text-dim);">→ Brave Search, Gmail, Slack (the actual service doing the work)</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== SECTION 4: CONFIG ===== -->
+  <div id="config" class="section">
+    <p style="color:var(--text-dim); margin-bottom:20px;">Here's what your <code>claude_desktop_config.json</code> actually looks like, and what each part does:</p>
+
+    <div class="config-block">
+      <div class="config-header">📄 claude_desktop_config.json</div>
+      <div class="config-body">{
+  <span class="key">"mcpServers"</span>: {
+    <span class="comment">// Each entry = one tool Claude can access</span>
+    <span class="key">"brave-search"</span>: {
+      <span class="key">"command"</span>: <span class="val">"uvx"</span>,         <span class="comment">// Runner: use uvx to launch it</span>
+      <span class="key">"args"</span>: [<span class="val">"mcp-server-brave-search"</span>],  <span class="comment">// Package name</span>
+      <span class="key">"env"</span>: {
+        <span class="key">"BRAVE_API_KEY"</span>: <span class="val">"your-key"</span>  <span class="comment">// Auth token for Brave</span>
+      }
+    },
+    <span class="key">"tavily"</span>: {
+      <span class="key">"command"</span>: <span class="val">"npx"</span>,          <span class="comment">// Runner: use npx (Node.js)</span>
+      <span class="key">"args"</span>: [<span class="val">"tavily-mcp"</span>],
+      <span class="key">"env"</span>: {
+        <span class="key">"TAVILY_API_KEY"</span>: <span class="val">"your-key"</span>
+      }
+    }
+  }
+}</div>
+    </div>
+
+    <h3 style="margin: 30px 0 16px; font-size: 1.1rem;">What Happens at Startup</h3>
+    <div class="flow-container">
+      <div class="flow-node node-user">
+        <span class="step-badge">BOOT 1</span>
+        <h3>📖 Claude Desktop Reads Config</h3>
+        <p>On launch, Claude Desktop reads the JSON config file to discover which MCP servers are available.</p>
+      </div>
+      <div class="flow-arrow">
+        <svg viewBox="0 0 24 28"><path d="M12 2 L12 22 M6 16 L12 22 L18 16"/></svg>
+      </div>
+      <div class="flow-node node-mcp">
+        <span class="step-badge">BOOT 2</span>
+        <h3>🚀 Spawns MCP Server Processes</h3>
+        <p>For each server in the config, it runs the command (e.g., <code>uvx mcp-server-brave-search</code>). This starts a local process on your machine that listens for requests.</p>
+      </div>
+      <div class="flow-arrow">
+        <svg viewBox="0 0 24 28"><path d="M12 2 L12 22 M6 16 L12 22 L18 16"/></svg>
+      </div>
+      <div class="flow-node node-ai">
+        <span class="step-badge">BOOT 3</span>
+        <h3>🤝 Handshake & Tool Discovery</h3>
+        <p>Each MCP server tells Claude: "Here are the tools I offer" (e.g., <em>web_search, local_search</em>). Claude now knows what it can do in this session.</p>
+      </div>
+      <div class="flow-arrow">
+        <svg viewBox="0 0 24 28"><path d="M12 2 L12 22 M6 16 L12 22 L18 16"/></svg>
+      </div>
+      <div class="flow-node node-user" style="border-left-color: var(--accent3);">
+        <span class="step-badge" style="background: var(--accent3); color:#000;">READY</span>
+        <h3>✅ Ready for Your Questions</h3>
+        <p>Claude Desktop shows you the chat interface. Behind the scenes, all MCP servers are running and waiting. When you ask something that needs web search, Claude already knows how to reach it.</p>
+      </div>
+    </div>
+
+    <div style="margin-top:24px; padding:20px; background:var(--surface); border-radius:16px; border:1px solid var(--border);">
+      <h4 style="color:var(--accent4); margin-bottom:10px; font-size:0.95rem;">⚠️ Your Error Explained</h4>
+      <p style="color:var(--text-dim); font-size:0.9rem;">
+        <strong style="color:var(--text);">"spawn uvx ENOENT"</strong> happened at <strong>Boot Step 2</strong>. Claude Desktop tried to run <code>uvx mcp-server-brave-search</code> but couldn't find the <code>uvx</code> executable. It's like trying to call an employee who doesn't exist yet — the process couldn't even start, so it immediately disconnected.
+      </p>
+    </div>
+  </div>
+
+  <!-- ===== SECTION 5: INTERVIEW ===== -->
+  <div id="interview" class="section">
+    <p style="color:var(--text-dim); margin-bottom:20px;">Click on any question to see a polished interview-ready answer.</p>
+
+    <div class="interview-section">
+
+      <div class="interview-card" onclick="toggleAnswer(this)">
+        <div class="interview-q">
+          How do AI tools like Claude access external services such as web search?
+          <span class="q-badge">MOST ASKED</span>
+        </div>
+        <div class="interview-a">
+          <strong>Answer:</strong> AI models like Claude use a protocol called <strong>MCP — Model Context Protocol</strong> — which is essentially a standardised bridge between the AI and external tools. When I ask Claude a question that needs real-time data, here's what happens: Claude recognises it needs to search the web, sends a structured request via MCP to a locally running server, that server translates it into the specific API call for Brave Search or whatever service, gets the results, and sends them back to Claude, which then synthesises a natural language response.
+
+          <div class="highlight">"Think of MCP as a universal adapter — like how USB-C lets you connect any device to any laptop. MCP lets any AI connect to any tool through one standard protocol."</div>
+
+          The beauty is that it's <strong>modular</strong> — you can plug in Brave Search, Gmail, Slack, databases, or file systems, all through the same protocol. And it runs locally on your machine, so your credentials and data stay secure.
+        </div>
+      </div>
+
+      <div class="interview-card" onclick="toggleAnswer(this)">
+        <div class="interview-q">
+          What is MCP and why does it matter?
+          <span class="q-badge">TECHNICAL</span>
+        </div>
+        <div class="interview-a">
+          <strong>Answer:</strong> MCP stands for <strong>Model Context Protocol</strong>, created by Anthropic. Before MCP, every AI integration was custom-built — if you wanted Claude to search the web, you'd build one connector; for Slack, another; for Gmail, another. Each was different.
+
+          MCP solves this with a <strong>single standard</strong>. Any developer can build an MCP server for their tool, and any AI that speaks MCP can use it instantly. It uses <strong>JSON-RPC</strong> for communication — a lightweight request-response format.
+
+          <div class="highlight">"It's like how ITIL standardised IT service management. Before ITIL, every company had different processes. MCP does the same thing for AI-to-tool communication — one standard that everyone follows."</div>
+
+          This matters because it makes the AI ecosystem <strong>composable</strong>. You can mix and match tools, swap them out, add new ones — all without changing the AI itself.
+        </div>
+      </div>
+
+      <div class="interview-card" onclick="toggleAnswer(this)">
+        <div class="interview-q">
+          What's the difference between uvx and npx?
+          <span class="q-badge">FOLLOW-UP</span>
+        </div>
+        <div class="interview-a">
+          <strong>Answer:</strong> Both are <strong>tool runners</strong> that download and execute packages on the fly without permanent installation.
+
+          <strong>npx</strong> is for the <strong>Node.js/JavaScript</strong> ecosystem — it comes with npm. When you run <code>npx tavily-mcp</code>, it fetches the Tavily MCP server package (written in JS) and runs it.
+
+          <strong>uvx</strong> is for the <strong>Python</strong> ecosystem — it comes with uv (a fast Python package manager). When you run <code>uvx mcp-server-brave-search</code>, it fetches the Brave Search MCP server (written in Python) and runs it.
+
+          <div class="highlight">"The choice depends on what language the MCP server is written in. It's like choosing between a Windows installer and a Mac installer — same software, different runtime environment."</div>
+        </div>
+      </div>
+
+      <div class="interview-card" onclick="toggleAnswer(this)">
+        <div class="interview-q">
+          How is this different from a regular API call?
+          <span class="q-badge">GREAT QUESTION</span>
+        </div>
+        <div class="interview-a">
+          <strong>Answer:</strong> A regular API call is <strong>point-to-point</strong> — your code directly calls Brave's API with specific parameters. You need to know Brave's exact endpoints, authentication method, and response format.
+
+          With MCP, the <strong>AI decides when and how</strong> to call the tool. You just ask a question in plain English. Claude figures out it needs a search, formats the right request, calls it through MCP, and interprets the results for you.
+
+          <div class="highlight">"It's the difference between you manually logging into ServiceNow to run a report versus telling an AI assistant 'show me last week's SLA breaches' and it handles everything — the query, the filters, and the summary."</div>
+
+          MCP also adds a <strong>standardisation layer</strong>. Even if Brave changes their API tomorrow, only the MCP server needs updating — the AI side stays the same. That's decoupling in action.
+        </div>
+      </div>
+
+      <div class="interview-card" onclick="toggleAnswer(this)">
+        <div class="interview-q">
+          Is this secure? Where does data go?
+          <span class="q-badge">SECURITY</span>
+        </div>
+        <div class="interview-a">
+          <strong>Answer:</strong> This is actually one of MCP's strengths. The MCP servers run <strong>locally on your machine</strong>. Your API keys stay in your local config file and never leave your system. When Claude needs to use a tool, the request goes from the cloud to your local MCP server, which then makes the external API call.
+
+          <div class="highlight">"The AI model in the cloud never sees your API keys. It only sees the results. It's like a VPN model — the intermediary handles the sensitive connection details."</div>
+
+          That said, the <strong>search query itself</strong> does travel to the external service (Brave sees your search terms), and the <strong>results</strong> travel back to Claude's cloud model. So it's not zero-exposure — but your credentials are protected, and you control which tools are enabled.
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="footer-note">
+    Built for understanding MCP architecture — from L2 analyst to interview-ready expert.
+  </div>
+</div>
+
+<script>
+  function showSection(id) {
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    event.target.classList.add('active');
+  }
+
+  function toggleAnswer(card) {
+    const answer = card.querySelector('.interview-a');
+    answer.classList.toggle('open');
+  }
+</script>
+
+</body>
+</html>
